@@ -1,0 +1,498 @@
+{% extends  "base.html" %}
+{% load chart_data_formatter %}
+{% load chart_data_formatter1000 %}
+{% load norm_ratio_name %}
+
+{% load m_or_null %}
+{% load chart_data_m %}
+{% load search_type_symbol %}
+{% block cont %}
+{% if search_type == "home" %}
+  {% include "mod-search-home.html" %}
+{% elif search_type == "search_tabs" %}
+  {% include "mod-search-tabs.html" %}
+{% elif search_type == "search_in_filing"  %}
+  {% include "mod-search-infiling.html" %}
+{% else %}
+  {% include "mod-search-read.html" %}
+{% endif %}
+{% endblock %}
+
+{% block onejs %}
+
+require(['jquery', 'dep/highcharts'], function($) {
+
+    $(".dropdown-menu-second li ul li a:contains('{{ fintable.ratio|search_type_symbol }}')");
+
+    var cachedStocksData = {},
+        cachedRatioData = {},
+        cachedMetaData = {},
+        cachedReportsData = {};
+
+    var Stocks = {
+        // part 1
+        tableFilingStocks: function(stocks) {
+            var html = ''
+                  +  '<thead>'
+                  +   '<tr align="center" valign="middle">'
+                  +    '<td width="10%">Symbol</td>'
+                  +    '<td width="11%">Last Price ($)</td>'
+                  +    '<td width="10%">Change (%)</td>'
+                  +    '<td width="10%">1 WK RTN (%)</td>'
+                  +    '<td width="10%">3 MON RTN (%)</td>'
+                  +    '<td width="10%">1 YR RTN (%)</td>'
+                  +    '<td width="11%">Volume</td>'
+                  +    '<td width="13%">Market Cap (M)</td>'
+                  +   '</tr>'
+                  +  '</thead>'
+                  +  '<tbody>';
+            for (var i=0; i<stocks.length; i++) {
+                var stock = stocks[i][0],
+                    related = stocks[i][1],
+                    price = stocks[i][2];
+
+                html += 
+                     +  '<tr role="row" class="odd">'
+                     +  '<td><a href="/stock/' + stock.exchange + '/' + stock.symbol + '/" '
+                     +  'class="card-company" title="' + stock.name + ' "  data-id="' + stock.CIK + '">' 
+                     +  stock.symbol + '</a></td>'
+                     +  '<td>' + price.close + '</td>'
+                     +  '<td><span class="'
+                     +  this.upDownMiddle(price, price.rate)
+                     +  '"><cite>' + price.rate + '</cite></span> </td>'
+                     +  '<td>'
+                     +  '<span class="'
+                     +  this.upDownMiddle(price, related.f_percent_weekly_performance)
+                     +  '"><cite>' + Number(related.f_percent_weekly_performance).toFixed(2) + '</cite></span>'
+                     +  '</td>'
+                     +  '<td><span class="'
+                     +  this.upDownMiddle(price, related.f_percent_3month_performance)
+                     +  '"><cite>' + Number(related.f_percent_3month_performance).toFixed(2) + '</cite></span>'
+                     +  '</td>'
+                     +  '<td>'
+                     +  '<span class="'
+                     +  this.upDownMiddle(price, related.f_percent_ytd_performance)
+                     +  '"><cite>' + Number(related.f_percent_ytd_performance).toFixed(2) + '</cite></span>'
+                     +  '</td>'
+                     +  '<td>' + String(related.i_volume).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&,') + '</td>'
+                     +  '<td>' + String(related.Market_Cap).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&,') + '</td>'
+                     +  '</tr>';
+            }
+            html += '</tbody>';
+
+            $("#search-stocks .table-screen").html(html);
+        },
+        // part 2
+        hcRevenue: function(fintable) {
+            var head = fintable.head;
+            var series = fintable.series;
+            var xAxisCat = [];
+            var seriesData = [];
+            var labelText = fintable.year + fintable.quarter ? 'Q' + fintable.quarter : '';
+            var valueSuffix = '';
+
+            switch(fintable.series_type) {
+                case 'money':
+                   valueSuffix = 'M';
+                   break;
+                case 'percent':
+                   valueSuffix = '%';
+                   break;
+                case 'number':
+                    valueSuffix = '';
+                    break;
+                default:
+                    valueSuffix = '';
+            }
+
+            for (var i=0; i<head.length; i++) {
+                xAxisCat.push(head[i].year + (head[i].quarter != 0 ? (' Q' + head[i].quarter) : ''));
+            }
+            
+            function chart_data_formatter(arr) {
+                for (var i=0; i<arr.length; i++) {
+                    if (arr[i][1]==='' || arr[i][1] === '-') {
+                        arr[i][1] = null;
+                    }
+                }
+                
+                return arr;
+            }
+            
+            for (var i=0; i<series.length; i++) {
+                var name = series[i][0];
+                var data_list = chart_data_formatter(series[i][1]);
+                if (fintable.singlesymbol) {
+                    if (fintable.ratio == name) {
+                        seriesData.push({'name':name, 'data':data_list});
+                    } 
+                } else {
+                    seriesData.push({'name':name, 'data':data_list});
+                }
+            }
+            
+            Highcharts.setOptions({
+                lang: {
+                    numericSymbols: ['K','M','B','T','P','E'],
+                    decimalPoint: '.',
+                    thousandsSep: ','
+                }
+            });
+
+            $(".hc-revenue").highcharts({
+                credits:{
+                    enabled:false
+                },
+                chart: {
+                    type: 'spline',
+                    height: 300,
+                    borderColor: '#fff',
+                    borderWidth: 1,
+                },
+                title: {
+                    text: ''
+                },
+                subtitle: {
+                    text: ''
+                },
+                legend: {
+                    align: 'center',
+                    verticalAlign: 'top',
+                    x: 0,
+                    y: 0
+                },
+                plotOptions: {
+                    spline: {
+                        marker: {
+                            radius: 4,
+                            lineColor: '#666',
+                            lineWidth: 0
+                        }
+                    },
+                    series: {connectNulls: true}
+                },
+                tooltip: {
+                    valueSuffix: valueSuffix,
+                    crosshairs: true,
+                    shared: true,
+                    backgroundColor: '#f8f8f8',
+                    style: {
+                        fontSize: '14px',
+                        fontFamily: 'Arial',
+                     }
+                },
+                xAxis: {
+                    plotLines: [{
+                        color: '#f8f8f8',
+                        width: 50,
+                        label: {
+                            text: labelText,
+                            verticalAlign: 'middle',
+                            textAlign: 'center',
+                            rotation: 0,
+                            x: 0,
+                            style: {
+                                color: '#333',
+                                fontWeight: 'bold',
+                            }
+                        }
+                    }],
+                    categories: xAxisCat
+                },
+                yAxis: {
+                    labels: {
+                        formatter: function () {
+                            var num = parseFloat(this.value);
+                            switch (fintable.series_type) {
+                                case 'money':
+                                   num = String(num).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&,') + 'M $';
+                                   break;
+                                case 'percent':
+                                   num = String(num) + ' %';
+                                   break;
+                                case 'number':
+                                    num = String(num).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&,');
+                                    break;
+                                default:
+                                    num = String(num).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&,');
+                            }
+                            return num;
+                        }
+                    },
+                    gridLineColor: '#f1f1f1',
+                    title: {
+                        text: ''
+                    }
+                },
+                series: seriesData
+            });
+        },
+        // part 3
+        tableResponse: function(fintable) {
+            var html = ''
+                     + '<table class="table table-hover table-summary">'
+                     + '<thead><tr><th></th>';
+
+            var head = fintable.head;
+            for (var i=0; i<head.length; i++) {
+                html += '<td>';
+                if (head[i].quarter == 0) {
+                    html += head[i].year;
+                } else {
+                    html += head[i].year + 'Q' + head[i].quarter;
+                }
+                html += '</td>';
+            }
+            html += '</tr></thead><tbody>';
+            var body = fintable.body;
+            for (var i=0; i<body.length; i++) {
+                var name = body[i][0];
+                var data_list = body[i][1];
+
+                if (fintable.singlesymbol) {
+                    if (fintable.ratio == name) {
+                        html += '<tr>'
+                             +  '<th scope="row">' + name + '</th>';
+                        for (var j=0; j<data_list.length; j++) {
+                            html += '<td>' + data_list[j] + '</td>';
+                        }
+                        html += '</tr>';
+                    } 
+                } else {
+                    html += '<tr>'
+                         +  '<th scope="row">' + name + '</th>';
+                    for (var j=0; j<data_list.length; j++) {
+                        html += '<td>' + data_list[j] + '</td>';   
+                    }
+                    html += '</tr>';
+                }
+            }
+            html += '</tbody></table>';
+
+            $(".table-responsive").html(html);
+        },
+
+        upDownMiddle: function(price, data) {
+            if (price) {
+                if (data > 0) {
+                    return 'mod-stock-up';
+                } else if (data < 0) {
+                    return 'mod-stock-down';
+                }
+            } else {
+                return 'mod-stock-middle';
+            }
+        },
+
+        getStocksAjax: function() {
+            var symbols = $("#search-stocks .table-screen").attr("symbol-param").split(',');
+            var symbol_url = '';
+            for (var i=0, max=symbols.length; i<max; i++) {
+                symbol_url += '&symbol=' + encodeURIComponent(symbols[i]);
+            }
+            symbol_url = symbol_url.substring(1);
+            var url = "/search/stock/?" + symbol_url;
+            var self = this;
+
+            $.ajax({
+                url: url,
+                dataType: 'json',
+                method: 'get'
+            }).done(function (data) {
+                cachedStocksData["stocks"] = data;
+                self.tableFilingStocks(data.stocks);
+            });
+        },
+        
+        getRatioAjax: function() {
+            var ratioActive = $(".myRatioPresentation.current .active"), 
+                symbol = ratioActive.attr("symbol-param"),
+                ratio = ratioActive.attr("ratio-param"),
+                name = ratioActive.attr("name-param");
+            var periodActive = $(".myPeriodTable .active"),
+                period = periodActive.attr("period-param");
+            var tabActive = $(".myTabPresentation .active"),
+                tab = tabActive.attr("tab-param");
+
+            var url = "/search/box/?"
+                    + "symbol=" + encodeURIComponent(symbol)
+                    + "&ratio=" + encodeURIComponent(ratio)
+                    + "&name=" + encodeURIComponent(name)
+                    + "&period=" + encodeURIComponent(period);
+            var self = this;
+
+            $.ajax({
+                url: url,
+                dataType: 'json',
+                method: 'get'
+            }).done(function (data) {
+                cachedRatioData[period + ratio] = data;
+                self.tableResponse(data);
+                self.hcRevenue(data);
+            });
+        }
+    };
+
+    var Meta = {
+
+        tableFilingMeta: function(meta) {
+            var html = ''
+                 +  '<table class="table-screen" style="margin-bottom:30px;">'
+                 +  '<thead>'
+                 +   '<tr>'
+                 +    '<td width="13%">Symbol</td>'
+                 +    '<td width="17%">Form Type</td>'
+                 +    '<td width="20%">Public Date</td>'
+                 +    '<td width="50%">Description</td>'
+                 +   '</tr>'
+                 +  '</thead>'
+                 +  '<tbody>'
+                 +  meta
+                 +  '</tbody>'
+                 +  '</table>';
+
+            $("#search-meta").html(html);
+        }
+    };
+
+    var Reports = {
+     
+        tableFilingReports: function(reports) {
+            $("#search-reports").html(reports);
+        }
+    };
+
+    $(function() { 
+        Stocks.getStocksAjax();
+        Stocks.getRatioAjax(); 
+    });
+    
+    $(".myRatioTable li, .myPeriodTable li").click(function() {
+        var myHtml = $(this).text();
+        $(this)
+            .parents(".myRatioPresentation")
+            .children("div")
+            .html(myHtml);
+
+        $(this)
+            .addClass("active")
+            .siblings()
+            .removeClass("active")
+            .parents(".myRatioPresentation.dropdown")
+            .addClass("current")
+            .siblings()
+            .removeClass("current");
+
+        var ratioData = '';
+        var current = $(".myPeriodTable li.active").attr("period-param") 
+                    + $(".myRatioPresentation.current .active").attr("ratio-param");
+
+        if (current in cachedRatioData) {
+            ratioData = cachedRatioData[current];
+            Stocks.tableResponse(ratioData);
+            Stocks.hcRevenue(ratioData);
+        } else {
+            Stocks.getRatioAjax();    
+        }
+
+        console.log(cachedRatioData, cachedStocksData);
+    });
+
+    function getTabAjax(tab) {
+        var query = $(".myTabNav").attr("query-param");
+        var url = "/search/?"
+                    + "q=" + query 
+                    + "&tab=" + tab;
+
+        $.ajax({
+            url: url,
+            dataType: tab=='stocks' ? 'json' : 'html',
+            method: 'get'
+        }).done(function (data) {
+            switch(tab) {
+                case 'stocks':
+                    tableFilingStocks(data.stock);
+                    tableResponse(data.fintable);
+                    hcRevenue(data.fintable);  
+                    break;
+                case 'meta':
+                    tableFilingMeta(data);
+                    break;
+                case 'reports':
+                    tableFilingReports(data);
+                    break;
+            }
+            
+        });
+    }
+
+    $(".myTabNav li").click(function() {
+        var tab = $(this).attr("tab-param");
+        getTabAjax(tab);
+    });
+});
+
+require(['dep/datatables'], function () {
+  $('#table-filing-meta').DataTable({
+    "order": [[ 2, "desc" ]],
+    "searching": false,
+    "lengthChange": false,
+  });
+});
+
+{% endblock %}
+
+<!--
+
+{% for name, data_series in fintable.body %}
+  {% if fintable.singlesymbol %}
+      {% if name == fintable.ratio %}
+
+        {name: '{{name|title}}',
+        data:[{% for yq, data in data_series %}{{data}},{% endfor %}],
+        }
+      {%endif%}
+  {%else%}
+      {name: '{{name}}',
+      data:[{% for yq, data in data_series %}{{data}},{% endfor %}],
+      },
+  {%endif%}
+{% endfor %}
+
+
+
+
+series: [
+                {% for name, data_series in fintable.body %}
+                  {% if fintable.singlesymbol %}
+                      {% if name == fintable.ratio %}
+
+                        {name: '{{name|title}}',
+                          data:
+function () {
+  return [{% for yq, data in data_series %}{{data|chart_data_formatter:name}},{% endfor %}].map(function (item) {
+    var num = item / 1000000;
+    var currency = parseFloat(String(num.toFixed(2)).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&'));
+    return Math.abs(num) >= 1 ? currency : item;
+  });
+}()
+
+
+                        }
+                      {%endif%}
+                  {%else%}
+                      {name: '{{name}}',
+                        data:
+function () {
+  return [{% for yq, data in data_series %}{{data|chart_data_formatter:name}},{% endfor %}].map(function (item) {
+    var num = item / 1000000;
+    var currency = parseFloat(String(num.toFixed(2)).replace(/\d{1,3}(?=(\d{3})+(\.\d*)?$)/g, '$&'));
+    return Math.abs(num) >= 1 ? currency : item;
+  });
+}()
+                      },
+                  {%endif%}
+                {% endfor %}
+          ]
+-->
+{% block app %}search{% endblock %}
